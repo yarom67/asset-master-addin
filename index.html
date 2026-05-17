@@ -389,7 +389,7 @@ async function loadFromDrive() {
       assets: files.map(f => ({
         id: f.id,
         name: f.name.replace(/\.[^.]+$/, ""),
-        url: `https://drive.google.com/uc?export=download&id=${f.id}`,
+        url: `${DRIVE_API}/${f.id}?alt=media&key=${GOOGLE_API_KEY}`,
         thumbnail: f.thumbnailLink
           ? f.thumbnailLink.replace(/=s\d+$/, "=s200")
           : `https://drive.google.com/thumbnail?id=${f.id}&sz=w200`,
