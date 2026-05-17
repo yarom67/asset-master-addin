@@ -12,11 +12,12 @@
   <DisplayName DefaultValue="ספריית נכסים"/>
   <Description DefaultValue="גישה מהירה לנכסים משותפים של הצוות"/>
 
-  <IconUrl DefaultValue="https://GITHUB_PAGES_URL/icons/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://GITHUB_PAGES_URL/icons/icon-64.png"/>
-  <SupportUrl DefaultValue="https://GITHUB_PAGES_URL"/>
+  <IconUrl DefaultValue="https://yaromstuff.github.io/asset-master-addin/icons/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://yaromstuff.github.io/asset-master-addin/icons/icon-64.png"/>
+  <SupportUrl DefaultValue="https://yaromstuff.github.io/asset-master-addin"/>
 
   <AppDomains>
+    <AppDomain>https://www.googleapis.com</AppDomain>
     <AppDomain>https://drive.google.com</AppDomain>
     <AppDomain>https://lh3.googleusercontent.com</AppDomain>
   </AppDomains>
@@ -32,7 +33,7 @@
   </Requirements>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://GITHUB_PAGES_URL/index.html"/>
+    <SourceLocation DefaultValue="https://yaromstuff.github.io/asset-master-addin/index.html"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -79,12 +80,12 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="icon.32" DefaultValue="https://GITHUB_PAGES_URL/icons/icon-32.png"/>
-        <bt:Image id="icon.64" DefaultValue="https://GITHUB_PAGES_URL/icons/icon-64.png"/>
-        <bt:Image id="icon.80" DefaultValue="https://GITHUB_PAGES_URL/icons/icon-80.png"/>
+        <bt:Image id="icon.32" DefaultValue="https://yaromstuff.github.io/asset-master-addin/icons/icon-32.png"/>
+        <bt:Image id="icon.64" DefaultValue="https://yaromstuff.github.io/asset-master-addin/icons/icon-64.png"/>
+        <bt:Image id="icon.80" DefaultValue="https://yaromstuff.github.io/asset-master-addin/icons/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="addin.url" DefaultValue="https://GITHUB_PAGES_URL/index.html"/>
+        <bt:Url id="addin.url" DefaultValue="https://yaromstuff.github.io/asset-master-addin/index.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="addin.title"  DefaultValue="ספריית נכסים"/>
