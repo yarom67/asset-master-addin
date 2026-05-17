@@ -326,7 +326,81 @@
 
 <script>
 // ─── Config ───────────────────────────────────────────────────────────────────
-const ASSETS_JSON_URL = "PASTE_YOUR_GOOGLE_DRIVE_JSON_URL_HERE";
+const ROOT_FOLDER_ID = "1kuLZ5Ayvn6Fdl7CK7o0qJWVQVumtE3VE";
+const GOOGLE_API_KEY = "PASTE_YOUR_GOOGLE_API_KEY_HERE";
+const DRIVE_API      = "https://www.googleapis.com/drive/v3/files";
+
+// ─── Folder → category mapping ────────────────────────────────────────────────
+const FOLDER_META = {
+  "מוקאפים":    { icon: "🖥️", label: "מוקאפים" },
+  "רקעים":      { icon: "🎨", label: "רקעים"    },
+  "אייקונים":   { icon: "⭐", label: "אייקונים"  },
+  "סאונד":      { icon: "🔊", label: "סאונד"     },
+  "לוגואים":    { icon: "✏️", label: "לוגואים"   },
+  "וידאו":      { icon: "🎬", label: "וידאו"     },
+  "mockups":    { icon: "🖥️", label: "מוקאפים"  },
+  "backgrounds":{ icon: "🎨", label: "רקעים"    },
+  "icons":      { icon: "⭐", label: "אייקונים"  },
+  "sound":      { icon: "🔊", label: "סאונד"     },
+};
+
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|svg|bmp|tiff?)$/i;
+const AUDIO_EXT = /\.(mp3|wav|aac|ogg|m4a|flac)$/i;
+
+function assetType(name, mime) {
+  if (IMAGE_EXT.test(name) || mime.startsWith("image/")) return "image";
+  if (AUDIO_EXT.test(name) || mime.startsWith("audio/")) return "audio";
+  return "file";
+}
+
+function driveUrl(params) {
+  return `${DRIVE_API}?${new URLSearchParams({ ...params, key: GOOGLE_API_KEY })}`;
+}
+
+async function loadFromDrive() {
+  // 1. Get subfolders
+  const fRes = await fetch(driveUrl({
+    q: `'${ROOT_FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    fields: "files(id,name)",
+    orderBy: "name",
+    pageSize: "100",
+  }));
+  if (!fRes.ok) throw new Error(`שגיאת Drive API: HTTP ${fRes.status}`);
+  const { files: folders = [] } = await fRes.json();
+  if (!folders.length) throw new Error("לא נמצאו תיקיות ב-Drive. בדוק הרשאות שיתוף.");
+
+  // 2. Get files in each folder (parallel)
+  const categories = await Promise.all(folders.map(async folder => {
+    const fls = await fetch(driveUrl({
+      q: `'${folder.id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false`,
+      fields: "files(id,name,mimeType,thumbnailLink)",
+      pageSize: "1000",
+    }));
+    const { files = [] } = await fls.json();
+
+    const meta = FOLDER_META[folder.name]
+      || FOLDER_META[folder.name.toLowerCase()]
+      || { icon: "📁", label: folder.name };
+
+    return {
+      id: folder.id,
+      label: meta.label,
+      icon: meta.icon,
+      assets: files.map(f => ({
+        id: f.id,
+        name: f.name.replace(/\.[^.]+$/, ""),
+        url: `https://drive.google.com/uc?export=download&id=${f.id}`,
+        thumbnail: f.thumbnailLink
+          ? f.thumbnailLink.replace(/=s\d+$/, "=s200")
+          : `https://drive.google.com/thumbnail?id=${f.id}&sz=w200`,
+        type: assetType(f.name, f.mimeType || ""),
+        tags: [],
+      })),
+    };
+  }));
+
+  return { categories };
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let data      = null;
@@ -359,19 +433,13 @@ Office.onReady(() => {
 async function load() {
   const cached = sessionStorage.getItem("am_cache_v1");
   if (cached) {
-    try {
-      data = JSON.parse(cached);
-      renderAll();
-      return;
-    } catch (_) {}
+    try { data = JSON.parse(cached); renderAll(); return; } catch (_) {}
   }
 
-  setBody(`<div class="spin-wrap"><div class="spin"></div><span>טוען נכסים...</span></div>`);
+  setBody(`<div class="spin-wrap"><div class="spin"></div><span>טוען נכסים מ-Drive...</span></div>`);
 
   try {
-    const r = await fetch(ASSETS_JSON_URL);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    data = await r.json();
+    data = await loadFromDrive();
     sessionStorage.setItem("am_cache_v1", JSON.stringify(data));
     renderAll();
   } catch (e) {
@@ -379,7 +447,7 @@ async function load() {
     $cnt.textContent = "";
     setBody(`<div class="empty">
       <span class="big">⚠️</span>
-      לא ניתן לטעון את הנכסים.<br>בדוק את החיבור לאינטרנט.
+      לא ניתן לטעון את הנכסים.<br>${esc(e.message || "בדוק את החיבור לאינטרנט.")}
       <br><button type="button" class="retry-btn" onclick="load()">נסה שוב</button>
     </div>`);
   }
