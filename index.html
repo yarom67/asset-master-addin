@@ -688,12 +688,9 @@ async function insertImageOnSlide(b64, dims) {
 
 async function insertAudio(asset, card) {
   showStatus("⏳ מכניס סאונד...", "inf", false);
-  try {
-    const r = await fetch(asset.url, { mode: "cors" });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const b64 = await blobToBase64(await r.blob());
 
-    let apiAvailable = false;
+  let apiAvailable = false;
+  try {
     await PowerPoint.run(async ctx => {
       let slide;
       try {
@@ -706,22 +703,33 @@ async function insertAudio(asset, card) {
         if (!slides.items.length) throw new Error("אין שקפים במצגת");
         slide = slides.items[0];
       }
+
       if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
-      apiAvailable = true;
+
+      // Only fetch if the API is actually available
+      const r = await fetch(asset.url, { mode: "cors" });
+      if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
+      const b64 = await blobToBase64(await r.blob());
+
       slide.shapes.addAudioFromBase64(b64, { isLooping: false, isPlaying: false });
       await ctx.sync();
+      apiAvailable = true;
     });
-
-    if (apiAvailable) {
-      card.classList.add("ins");
-      setTimeout(() => card.classList.remove("ins"), 550);
-      showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
-    } else {
-      showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
-      window.open(asset.url, "_blank");
-    }
   } catch (e) {
     showStatus(`❌ ${e.message || "שגיאת סאונד"}`, "err");
+    return;
+  }
+
+  if (apiAvailable) {
+    card.classList.add("ins");
+    setTimeout(() => card.classList.remove("ins"), 550);
+    showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
+  } else {
+    // window.open is blocked in Office WKWebView — use the Office API instead
+    try { Office.context.ui.openBrowserWindow(asset.url); } catch (_) {
+      window.open(asset.url, "_blank");
+    }
+    showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
   }
 }
 
