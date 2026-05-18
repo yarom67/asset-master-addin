@@ -431,7 +431,7 @@ Office.onReady(() => {
 
 // ─── Load assets ──────────────────────────────────────────────────────────────
 async function load() {
-  const cached = sessionStorage.getItem("am_cache_v1");
+  const cached = sessionStorage.getItem("am_cache_v2");
   if (cached) {
     try { data = JSON.parse(cached); renderAll(); return; } catch (_) {}
   }
@@ -440,7 +440,7 @@ async function load() {
 
   try {
     data = await loadFromDrive();
-    sessionStorage.setItem("am_cache_v1", JSON.stringify(data));
+    sessionStorage.setItem("am_cache_v2", JSON.stringify(data));
     renderAll();
   } catch (e) {
     $tabs.innerHTML = "";
@@ -605,57 +605,30 @@ function makeCard(asset) {
 
 // ─── Insert ────────────────────────────────────────────────────────────────────
 async function insertAsset(asset, card) {
-  if (asset.type === "audio" || asset.type === "sound") {
-    showStatus("⚠️ קבצי סאונד אינם נתמכים להכנסה ישירה. לחץ להורדה.", "inf");
-    window.open(asset.url, "_blank");
+  if (asset.type === "audio") {
+    await insertAudio(asset, card);
     return;
   }
 
   showStatus("⏳ מכניס לשקף...", "inf", false);
 
   try {
-    // Fetch image
     const r = await fetch(asset.url, { mode: "cors" });
     if (!r.ok) throw new Error(`לא ניתן להוריד את הקובץ (HTTP ${r.status})`);
     const blob = await r.blob();
 
-    // Get natural dimensions for correct aspect ratio
-    const dims = await getImgDims(URL.createObjectURL(blob));
+    const isSvg = /\.svg$/i.test(asset.name) || blob.type === "image/svg+xml";
+    let b64, dims;
 
-    // Convert to base64
-    const b64 = await blobToBase64(blob);
+    if (isSvg) {
+      const res = await rasterizeSvg(blob);
+      b64 = res.b64; dims = res.dims;
+    } else {
+      dims = await getImgDims(URL.createObjectURL(blob));
+      b64  = await blobToBase64(blob);
+    }
 
-    // Insert via PowerPoint JS API
-    await PowerPoint.run(async ctx => {
-      let slide;
-
-      // Try getSelectedSlides (requires API 1.5), fallback to first slide
-      try {
-        const sel = ctx.presentation.getSelectedSlides();
-        sel.load("items");
-        await ctx.sync();
-        slide = sel.items[0];
-      } catch (_) {
-        const slides = ctx.presentation.slides;
-        slides.load("items");
-        await ctx.sync();
-        if (!slides.items.length) throw new Error("אין שקפים במצגת");
-        slide = slides.items[0];
-      }
-
-      // Standard slide: 720pt wide × 540pt tall (10" × 7.5" at 72pt/in)
-      const SLIDE_W = 720, SLIDE_H = 540;
-      const imgW = SLIDE_W * 0.4;
-      const imgH = imgW * (dims.h / dims.w);
-
-      const shape = slide.shapes.addImage(b64);
-      shape.width  = imgW;
-      shape.height = imgH;
-      shape.left   = (SLIDE_W - imgW) / 2;
-      shape.top    = (SLIDE_H - imgH) / 2;
-
-      await ctx.sync();
-    });
+    await insertImageOnSlide(b64, dims);
 
     card.classList.add("ins");
     setTimeout(() => card.classList.remove("ins"), 550);
@@ -668,6 +641,115 @@ async function insertAsset(asset, card) {
     }
     showStatus(`❌ ${msg}`, "err");
   }
+}
+
+async function insertImageOnSlide(b64, dims) {
+  const SLIDE_W = 720, SLIDE_H = 540;
+  const imgW = Math.round(SLIDE_W * 0.4);
+  const imgH = Math.round(imgW * (dims.h / dims.w));
+  const left = Math.round((SLIDE_W - imgW) / 2);
+  const top  = Math.round((SLIDE_H - imgH) / 2);
+
+  let useFallback = false;
+
+  try {
+    await PowerPoint.run(async ctx => {
+      let slide;
+      try {
+        const sel = ctx.presentation.getSelectedSlides();
+        sel.load("items"); await ctx.sync();
+        slide = sel.items[0];
+      } catch (_) {
+        const slides = ctx.presentation.slides;
+        slides.load("items"); await ctx.sync();
+        if (!slides.items.length) throw new Error("אין שקפים במצגת");
+        slide = slides.items[0];
+      }
+
+      if (typeof slide.shapes.addImage !== "function") { useFallback = true; return; }
+
+      const shape = slide.shapes.addImage(b64);
+      shape.width = imgW; shape.height = imgH;
+      shape.left  = left; shape.top    = top;
+      await ctx.sync();
+    });
+  } catch (e) {
+    const m = e.message || "";
+    if (m.includes("addImage") || m.includes("not a function")) useFallback = true;
+    else throw e;
+  }
+
+  if (!useFallback) return;
+
+  // Fallback: setSelectedDataAsync (API 1.1+, broadly compatible)
+  await new Promise((res, rej) => {
+    Office.context.document.setSelectedDataAsync(b64, {
+      coercionType: Office.CoercionType.Image,
+      imageLeft: left, imageTop: top,
+      imageWidth: imgW, imageHeight: imgH,
+    }, r => r.status === Office.AsyncResultStatus.Failed
+      ? rej(new Error(r.error.message || "שגיאה בהכנסת תמונה"))
+      : res());
+  });
+}
+
+async function insertAudio(asset, card) {
+  showStatus("⏳ מכניס סאונד...", "inf", false);
+  try {
+    const r = await fetch(asset.url, { mode: "cors" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const b64 = await blobToBase64(await r.blob());
+
+    let apiAvailable = false;
+    await PowerPoint.run(async ctx => {
+      let slide;
+      try {
+        const sel = ctx.presentation.getSelectedSlides();
+        sel.load("items"); await ctx.sync();
+        slide = sel.items[0];
+      } catch (_) {
+        const slides = ctx.presentation.slides;
+        slides.load("items"); await ctx.sync();
+        if (!slides.items.length) throw new Error("אין שקפים במצגת");
+        slide = slides.items[0];
+      }
+      if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
+      apiAvailable = true;
+      slide.shapes.addAudioFromBase64(b64, { isLooping: false, isPlaying: false });
+      await ctx.sync();
+    });
+
+    if (apiAvailable) {
+      card.classList.add("ins");
+      setTimeout(() => card.classList.remove("ins"), 550);
+      showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
+    } else {
+      showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
+      window.open(asset.url, "_blank");
+    }
+  } catch (e) {
+    showStatus(`❌ ${e.message || "שגיאת סאונד"}`, "err");
+  }
+}
+
+async function rasterizeSvg(svgBlob) {
+  const url = URL.createObjectURL(svgBlob);
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const srcW = img.naturalWidth  || 800;
+      const srcH = img.naturalHeight || 600;
+      const scale = Math.max(2, 2048 / srcW);
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(srcW * scale);
+      canvas.height = Math.round(srcH * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      res({ b64: canvas.toDataURL("image/png").split(",")[1], dims: { w: srcW, h: srcH } });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("לא ניתן לטעון SVG")); };
+    img.src = url;
+  });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
