@@ -4,26 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ספריית נכסים</title>
-  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
-      --bg: #ffffff;
-      --fg: #09090b;
-      --border: #e4e4e7;
-      --muted: #f4f4f5;
-      --muted-fg: #71717a;
-      --primary: #0078d4;
-      --primary-fg: #ffffff;
-      --radius: 8px;
-      --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / .07), 0 1px 2px -1px rgb(0 0 0 / .07);
-    }
-
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--fg);
+      background: #fff;
+      color: #201f1e;
       font-size: 13px;
       height: 100vh;
       display: flex;
@@ -33,60 +21,61 @@
 
     /* ── Header ─────────────────────────────────────── */
     .hdr {
-      background: var(--primary);
-      color: var(--primary-fg);
-      padding: 10px 12px 8px;
+      background: #0078d4;
+      color: #fff;
+      padding: 11px 12px 9px;
       flex-shrink: 0;
     }
 
     .hdr h1 {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
-      margin-bottom: 7px;
+      margin-bottom: 8px;
+      letter-spacing: 0.1px;
     }
 
     .search-wrap {
       display: flex;
       align-items: center;
-      background: rgba(255,255,255,.15);
-      border: 1px solid rgba(255,255,255,.25);
-      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 3px;
       padding: 5px 8px;
       gap: 6px;
-      transition: background .15s, border-color .15s;
+      transition: background 0.15s, border-color 0.15s;
     }
 
     .search-wrap:focus-within {
-      background: rgba(255,255,255,.22);
-      border-color: rgba(255,255,255,.55);
+      background: rgba(255, 255, 255, 0.26);
+      border-color: rgba(255, 255, 255, 0.6);
     }
 
-    .search-icon { display: flex; align-items: center; opacity: .75; flex-shrink: 0; }
+    .search-icon { display: flex; align-items: center; opacity: 0.8; flex-shrink: 0; }
 
     .search-wrap input {
       flex: 1;
       background: none;
       border: none;
       outline: none;
-      color: var(--primary-fg);
+      color: #fff;
       font: inherit;
       font-size: 12px;
     }
 
-    .search-wrap input::placeholder { color: rgba(255,255,255,.55); }
+    .search-wrap input::placeholder { color: rgba(255, 255, 255, 0.6); }
 
     .count {
-      font-size: 10px;
-      color: rgba(255,255,255,.75);
-      margin-top: 5px;
-      min-height: 13px;
+      font-size: 10.5px;
+      color: rgba(255, 255, 255, 0.82);
+      margin-top: 6px;
+      min-height: 14px;
     }
 
     /* ── Tabs ────────────────────────────────────────── */
     .tabs {
       display: flex;
-      background: var(--bg);
-      border-bottom: 1px solid var(--border);
+      background: #faf9f8;
+      border-bottom: 1px solid #edebe9;
       overflow-x: auto;
       scrollbar-width: none;
       flex-shrink: 0;
@@ -95,44 +84,45 @@
     .tabs::-webkit-scrollbar { display: none; }
 
     .tab {
-      padding: 8px 11px;
+      padding: 9px 11px;
       font-size: 11.5px;
-      color: var(--muted-fg);
+      color: #605e5c;
       cursor: pointer;
       border-bottom: 2px solid transparent;
       white-space: nowrap;
       user-select: none;
       flex-shrink: 0;
       outline: none;
-      transition: color .12s;
+      transition: color 0.12s, background 0.12s;
     }
 
-    .tab:hover { color: var(--fg); }
+    .tab:hover { color: #201f1e; background: #f3f2f1; }
 
     .tab:focus-visible {
-      outline: 2px solid var(--primary);
+      outline: 2px solid #0078d4;
       outline-offset: -2px;
     }
 
     .tab.on {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
+      color: #0078d4;
+      border-bottom-color: #0078d4;
+      background: #fff;
       font-weight: 600;
     }
 
     /* ── Status bar ──────────────────────────────────── */
     #st {
       display: none;
-      padding: 8px 12px;
+      padding: 7px 10px;
       font-size: 11.5px;
       flex-shrink: 0;
       border-bottom: 1px solid transparent;
       line-height: 1.4;
     }
 
-    #st.ok  { display: block; background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
-    #st.err { display: block; background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-    #st.inf { display: block; background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    #st.ok  { display: block; background: #dff6dd; color: #1e7e34;  border-color: #c3e6cb; }
+    #st.err { display: block; background: #fde7e9; color: #a80000;  border-color: #f4acb0; }
+    #st.inf { display: block; background: #deecf9; color: #004578;  border-color: #b3d0ee; }
 
     /* ── Scrollable body ─────────────────────────────── */
     #body {
@@ -142,7 +132,7 @@
     }
 
     #body::-webkit-scrollbar { width: 4px; }
-    #body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    #body::-webkit-scrollbar-thumb { background: #c8c6c4; border-radius: 4px; }
 
     /* ── Grid ────────────────────────────────────────── */
     .grid {
@@ -153,40 +143,41 @@
 
     /* ── Card ────────────────────────────────────────── */
     .card {
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border: 1px solid #edebe9;
+      border-radius: 4px;
       overflow: hidden;
       cursor: pointer;
-      background: var(--bg);
+      background: #fff;
       outline: none;
-      transition: box-shadow .15s, border-color .15s;
+      transition: box-shadow 0.15s, transform 0.12s, border-color 0.15s;
       -webkit-tap-highlight-color: transparent;
     }
 
     .card:hover {
-      box-shadow: var(--shadow-sm);
-      border-color: #a1a1aa;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      transform: translateY(-1px);
+      border-color: #0078d4;
     }
 
-    .card:active { opacity: .8; }
+    .card:active { transform: scale(0.97); box-shadow: none; }
 
     .card:focus-visible {
-      outline: 2px solid var(--primary);
+      outline: 2px solid #0078d4;
       outline-offset: 1px;
     }
 
-    .card.ins { animation: ins-flash .5s ease; }
+    .card.ins { animation: ins-flash 0.55s ease; }
 
     @keyframes ins-flash {
-      0%, 100% { border-color: var(--border); background: var(--bg); }
-      45%       { border-color: #16a34a;       background: #f0fdf4;  }
+      0%, 100% { background: #fff; border-color: #edebe9; }
+      40%       { background: #dff6dd; border-color: #107c10; }
     }
 
     /* Thumbnail */
     .thumb {
       width: 100%;
       aspect-ratio: 4 / 3;
-      background: var(--muted);
+      background: #f3f2f1;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -201,7 +192,7 @@
       height: 100%;
       object-fit: cover;
       opacity: 0;
-      transition: opacity .2s;
+      transition: opacity 0.2s;
     }
 
     .thumb img.vis { opacity: 1; }
@@ -209,9 +200,9 @@
     .ske {
       position: absolute;
       inset: 0;
-      background: linear-gradient(90deg, var(--muted) 25%, #e9e9eb 50%, var(--muted) 75%);
+      background: linear-gradient(90deg, #f3f2f1 25%, #e8e6e4 50%, #f3f2f1 75%);
       background-size: 200% 100%;
-      animation: ske 1.4s infinite;
+      animation: ske 1.3s infinite;
     }
 
     @keyframes ske {
@@ -220,8 +211,8 @@
     }
 
     .thumb-icon {
-      font-size: 24px;
-      opacity: .3;
+      font-size: 26px;
+      opacity: 0.4;
       position: relative;
       z-index: 1;
     }
@@ -229,13 +220,13 @@
     /* Card info */
     .info {
       padding: 5px 7px 6px;
-      border-top: 1px solid var(--muted);
+      border-top: 1px solid #f3f2f1;
     }
 
     .name {
       font-size: 11px;
       font-weight: 500;
-      color: var(--fg);
+      color: #201f1e;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -243,11 +234,10 @@
     }
 
     .ext {
-      font-size: 9.5px;
-      color: var(--muted-fg);
+      font-size: 10px;
+      color: #6e6b69;
       text-transform: uppercase;
-      letter-spacing: .4px;
-      font-weight: 500;
+      letter-spacing: 0.3px;
     }
 
     /* ── Loading / empty states ──────────────────────── */
@@ -257,52 +247,54 @@
       align-items: center;
       justify-content: center;
       gap: 12px;
-      padding: 48px 0;
-      color: var(--muted-fg);
+      padding: 44px 0;
+      color: #6e6b69;
       font-size: 12px;
     }
 
     .spin {
-      width: 24px;
-      height: 24px;
-      border: 2.5px solid var(--border);
-      border-top-color: var(--primary);
+      width: 26px;
+      height: 26px;
+      border: 3px solid #edebe9;
+      border-top-color: #0078d4;
       border-radius: 50%;
-      animation: spin .7s linear infinite;
+      animation: spin 0.65s linear infinite;
     }
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .empty {
       text-align: center;
-      padding: 32px 16px;
-      color: var(--muted-fg);
+      padding: 30px 16px;
+      color: #6e6b69;
       font-size: 12px;
       line-height: 1.75;
     }
 
-    .empty .big { font-size: 26px; display: block; margin-bottom: 8px; }
+    .empty .big { font-size: 28px; display: block; margin-bottom: 7px; }
 
     .retry-btn {
       display: inline-block;
       margin-top: 10px;
       padding: 5px 14px;
-      background: var(--primary);
-      color: var(--primary-fg);
+      background: #0078d4;
+      color: #fff;
       border: none;
-      border-radius: 6px;
+      border-radius: 3px;
       font: inherit;
       font-size: 12px;
       cursor: pointer;
-      transition: opacity .12s;
+      transition: background 0.12s;
     }
 
-    .retry-btn:hover { opacity: .88; }
-    .retry-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .retry-btn:hover { background: #106ebe; }
+    .retry-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
     /* ── Reduced motion ──────────────────────────────── */
     @media (prefers-reduced-motion: reduce) {
-      .card, .tab, .retry-btn, .search-wrap, .thumb img { transition: none !important; }
+      .card, .tab, .retry-btn, .search-wrap, .thumb img {
+        transition: none !important;
+      }
       .card.ins, .spin, .ske { animation: none !important; }
     }
   </style>
@@ -696,9 +688,12 @@ async function insertImageOnSlide(b64, dims) {
 
 async function insertAudio(asset, card) {
   showStatus("⏳ מכניס סאונד...", "inf", false);
-
-  let apiAvailable = false;
   try {
+    const r = await fetch(asset.url, { mode: "cors" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const b64 = await blobToBase64(await r.blob());
+
+    let apiAvailable = false;
     await PowerPoint.run(async ctx => {
       let slide;
       try {
@@ -711,33 +706,22 @@ async function insertAudio(asset, card) {
         if (!slides.items.length) throw new Error("אין שקפים במצגת");
         slide = slides.items[0];
       }
-
       if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
-
-      // Only fetch if the API is actually available
-      const r = await fetch(asset.url, { mode: "cors" });
-      if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
-      const b64 = await blobToBase64(await r.blob());
-
+      apiAvailable = true;
       slide.shapes.addAudioFromBase64(b64, { isLooping: false, isPlaying: false });
       await ctx.sync();
-      apiAvailable = true;
     });
-  } catch (e) {
-    showStatus(`❌ ${e.message || "שגיאת סאונד"}`, "err");
-    return;
-  }
 
-  if (apiAvailable) {
-    card.classList.add("ins");
-    setTimeout(() => card.classList.remove("ins"), 550);
-    showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
-  } else {
-    // window.open is blocked in Office WKWebView — use the Office API instead
-    try { Office.context.ui.openBrowserWindow(asset.url); } catch (_) {
+    if (apiAvailable) {
+      card.classList.add("ins");
+      setTimeout(() => card.classList.remove("ins"), 550);
+      showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
+    } else {
+      showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
       window.open(asset.url, "_blank");
     }
-    showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
+  } catch (e) {
+    showStatus(`❌ ${e.message || "שגיאת סאונד"}`, "err");
   }
 }
 
