@@ -618,15 +618,8 @@ async function insertAsset(asset, card) {
     const blob = await r.blob();
 
     const isSvg = /\.svg$/i.test(asset.name) || blob.type === "image/svg+xml";
-    let b64, dims;
-
-    if (isSvg) {
-      const res = await rasterizeSvg(blob);
-      b64 = res.b64; dims = res.dims;
-    } else {
-      dims = await getImgDims(URL.createObjectURL(blob));
-      b64  = await blobToBase64(blob);
-    }
+    const dims  = isSvg ? await getSvgDims(blob) : await getImgDims(URL.createObjectURL(blob));
+    const b64   = await blobToBase64(blob);
 
     await insertImageOnSlide(b64, dims);
 
@@ -732,24 +725,16 @@ async function insertAudio(asset, card) {
   }
 }
 
-async function rasterizeSvg(svgBlob) {
-  const url = URL.createObjectURL(svgBlob);
-  return new Promise((res, rej) => {
-    const img = new Image();
-    img.onload = () => {
-      const srcW = img.naturalWidth  || 800;
-      const srcH = img.naturalHeight || 600;
-      const scale = Math.max(2, 2048 / srcW);
-      const canvas = document.createElement("canvas");
-      canvas.width  = Math.round(srcW * scale);
-      canvas.height = Math.round(srcH * scale);
-      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      res({ b64: canvas.toDataURL("image/png").split(",")[1], dims: { w: srcW, h: srcH } });
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("לא ניתן לטעון SVG")); };
-    img.src = url;
-  });
+async function getSvgDims(blob) {
+  try {
+    const text = await blob.text();
+    const w = parseFloat(text.match(/\bwidth="([\d.]+)/)?.[1]);
+    const h = parseFloat(text.match(/\bheight="([\d.]+)/)?.[1]);
+    if (w > 0 && h > 0) return { w, h };
+    const vb = text.match(/viewBox="([^"]+)"/)?.[1]?.trim().split(/[\s,]+/);
+    if (vb?.length >= 4) return { w: parseFloat(vb[2]), h: parseFloat(vb[3]) };
+  } catch (_) {}
+  return { w: 1, h: 1 };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
