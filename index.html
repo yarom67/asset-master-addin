@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ספריית נכסים</title>
-  <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -389,6 +389,7 @@ async function loadFromDrive() {
       assets: files.map(f => ({
         id: f.id,
         name: f.name.replace(/\.[^.]+$/, ""),
+        rawName: f.name,
         url: `${DRIVE_API}/${f.id}?alt=media&key=${GOOGLE_API_KEY}`,
         thumbnail: f.thumbnailLink
           ? f.thumbnailLink.replace(/=s\d+$/, "=s200")
@@ -431,7 +432,7 @@ Office.onReady(() => {
 
 // ─── Load assets ──────────────────────────────────────────────────────────────
 async function load() {
-  const cached = sessionStorage.getItem("am_cache_v2");
+  const cached = sessionStorage.getItem("am_cache_v3");
   if (cached) {
     try { data = JSON.parse(cached); renderAll(); return; } catch (_) {}
   }
@@ -440,7 +441,7 @@ async function load() {
 
   try {
     data = await loadFromDrive();
-    sessionStorage.setItem("am_cache_v2", JSON.stringify(data));
+    sessionStorage.setItem("am_cache_v3", JSON.stringify(data));
     renderAll();
   } catch (e) {
     $tabs.innerHTML = "";
@@ -617,7 +618,7 @@ async function insertAsset(asset, card) {
     if (!r.ok) throw new Error(`לא ניתן להוריד את הקובץ (HTTP ${r.status})`);
     const blob = await r.blob();
 
-    const isSvg = /\.svg$/i.test(asset.name) || blob.type === "image/svg+xml";
+    const isSvg = /\.svg$/i.test(asset.rawName || asset.name) || blob.type === "image/svg+xml";
     const dims  = isSvg ? await getSvgDims(blob) : await getImgDims(URL.createObjectURL(blob));
     const b64   = await blobToBase64(blob);
 
@@ -688,12 +689,8 @@ async function insertImageOnSlide(b64, dims) {
 
 async function insertAudio(asset, card) {
   showStatus("⏳ מכניס סאונד...", "inf", false);
+  let apiAvailable = false;
   try {
-    const r = await fetch(asset.url, { mode: "cors" });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const b64 = await blobToBase64(await r.blob());
-
-    let apiAvailable = false;
     await PowerPoint.run(async ctx => {
       let slide;
       try {
@@ -707,21 +704,27 @@ async function insertAudio(asset, card) {
         slide = slides.items[0];
       }
       if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
-      apiAvailable = true;
+
+      const r = await fetch(asset.url, { mode: "cors" });
+      if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
+      const b64 = await blobToBase64(await r.blob());
+
       slide.shapes.addAudioFromBase64(b64, { isLooping: false, isPlaying: false });
       await ctx.sync();
+      apiAvailable = true;
     });
-
-    if (apiAvailable) {
-      card.classList.add("ins");
-      setTimeout(() => card.classList.remove("ins"), 550);
-      showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
-    } else {
-      showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
-      window.open(asset.url, "_blank");
-    }
   } catch (e) {
     showStatus(`❌ ${e.message || "שגיאת סאונד"}`, "err");
+    return;
+  }
+
+  if (apiAvailable) {
+    card.classList.add("ins");
+    setTimeout(() => card.classList.remove("ins"), 550);
+    showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
+  } else {
+    try { Office.context.ui.openBrowserWindow(asset.url); } catch (_) { window.open(asset.url, "_blank"); }
+    showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
   }
 }
 
