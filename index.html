@@ -23,7 +23,8 @@
       --bg: #f1f5f9;
       --surface: #ffffff;
       --border: #e2e8f0;
-      --radius: 8px;
+      --primary-fg: #ffffff;
+      --radius: 10px;
       --t: 140ms ease;
     }
 
@@ -41,18 +42,24 @@
 
     /* ── Header ─────────────────────────────────────── */
     .hdr {
-      background: var(--primary);
+      background: linear-gradient(135deg, #1488e6 0%, var(--primary) 52%, var(--primary-dark) 100%);
       color: #fff;
-      padding: 12px 12px 10px;
+      padding: 13px 13px 11px;
       flex-shrink: 0;
+      box-shadow: 0 1px 0 rgba(0,0,0,.04);
     }
 
     .hdr h1 {
-      font-size: 14px;
+      font-size: 14.5px;
       font-weight: 600;
-      margin-bottom: 9px;
-      letter-spacing: -0.1px;
+      margin-bottom: 10px;
+      letter-spacing: -0.2px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
     }
+
+    .hdr h1 svg { opacity: .92; }
 
     .search-wrap {
       display: flex;
@@ -97,43 +104,48 @@
       margin-top: 2px;
     }
 
-    /* ── Tabs ────────────────────────────────────────── */
+    /* ── Tabs (segmented pills) ──────────────────────── */
     .tabs {
       display: flex;
+      gap: 6px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       overflow-x: auto;
       scrollbar-width: none;
       flex-shrink: 0;
+      padding: 9px 10px;
     }
 
     .tabs::-webkit-scrollbar { display: none; }
 
     .tab {
-      padding: 9px 12px;
+      padding: 6px 12px;
       font-size: 12px;
       font-weight: 500;
       color: var(--fg-2);
+      background: var(--bg);
+      border: 1px solid transparent;
+      border-radius: 999px;
       cursor: pointer;
-      border-bottom: 2px solid transparent;
       white-space: nowrap;
       user-select: none;
       flex-shrink: 0;
       outline: none;
-      transition: color var(--t);
+      transition: background var(--t), color var(--t), box-shadow var(--t);
     }
 
-    .tab:hover { color: var(--fg); }
+    .tab:hover { color: var(--fg); background: #e9eef5; }
 
     .tab:focus-visible {
       outline: 2px solid var(--primary);
-      outline-offset: -2px;
+      outline-offset: 1px;
     }
 
     .tab.on {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
+      color: var(--primary-fg, #fff);
+      background: var(--primary);
       font-weight: 600;
+      box-shadow: 0 1px 4px rgba(0, 120, 212, 0.32);
     }
 
     /* ── Status bar ──────────────────────────────────── */
@@ -178,13 +190,15 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
-      cursor: pointer;
+      cursor: grab;
       background: var(--surface);
       outline: none;
-      transition: box-shadow var(--t), border-color var(--t);
+      transition: box-shadow var(--t), border-color var(--t), transform var(--t);
       -webkit-tap-highlight-color: transparent;
       user-select: none;
     }
+
+    .card:active { cursor: grabbing; }
 
     /* Suppress the IMG's own (thumbnail) drag so the CARD-level high-quality drag fires. */
     .card img, .thumb img { -webkit-user-drag: none; user-drag: none; }
@@ -248,11 +262,47 @@
     }
 
     .thumb-icon {
-      font-size: 24px;
-      opacity: 0.32;
+      width: 30px;
+      height: 30px;
+      opacity: 0.42;
       position: relative;
       z-index: 1;
+      color: var(--fg-3);
     }
+    .thumb-icon svg { width: 100%; height: 100%; }
+
+    /* type badge (PNG / SVG / MP3 …) — floats over the thumbnail corner */
+    .badge {
+      position: absolute;
+      top: 6px;
+      inset-inline-start: 6px;
+      z-index: 2;
+      padding: 2px 6px;
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      color: #fff;
+      background: rgba(15, 23, 42, 0.62);
+      border-radius: 6px;
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      pointer-events: none;
+    }
+
+    /* "add to slide" affordance that fades in on hover */
+    .add-cue {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 120, 212, 0.16);
+      opacity: 0;
+      transition: opacity var(--t);
+    }
+    .add-cue svg { width: 26px; height: 26px; color: #fff; filter: drop-shadow(0 1px 3px rgba(0,0,0,.35)); }
+    .card:hover .add-cue { opacity: 1; }
 
     /* Card info */
     .info {
@@ -267,15 +317,6 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin-bottom: 2px;
-    }
-
-    .ext {
-      font-size: 10px;
-      color: var(--fg-3);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 500;
     }
 
     /* ── Loading / empty states ──────────────────────── */
@@ -342,7 +383,13 @@
 <body>
 
 <div class="hdr">
-  <h1>ספריית נכסים</h1>
+  <h1>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+    </svg>
+    ספריית נכסים
+  </h1>
   <div class="search-wrap" role="search">
     <span class="search-icon" aria-hidden="true">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -589,6 +636,13 @@ function renderGrid() {
   $body.appendChild(grid);
 }
 
+// ─── SVG icons (Lucide-style, no emoji) ─────────────────────────────────────────
+const ICONS = {
+  audio: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+  image: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>`,
+  add:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>`,
+};
+
 // ─── Card ──────────────────────────────────────────────────────────────────────
 function makeCard(asset) {
   const isAudio = asset.type === "audio";
@@ -596,26 +650,15 @@ function makeCard(asset) {
   const card  = document.createElement("div");
   card.className = "card";
 
-  // ⚠️ QUALITY-CRITICAL: high-quality drag-and-drop.
-  // Dragging must hand the host the FULL image bytes as a data URL — NOT the thumbnail
-  // bitmap (low-res) and NOT the Drive URL (the API key is referrer-locked to this
-  // origin, so the host's own downloader gets 403). We prefetch the full file on hover
-  // and embed it in `text/html` so the drop is full resolution.
-  if (!isAudio) {
-    card.draggable = true;
-    card.addEventListener("pointerenter", () => prefetchDragData(asset));
-    card.addEventListener("pointerdown",  () => prefetchDragData(asset));
-    card.addEventListener("dragstart", e => {
-      if (asset._dragHtml) {
-        e.dataTransfer.setData("text/html", asset._dragHtml);
-        e.dataTransfer.effectAllowed = "copy";
-      } else {
-        // Not cached yet — drop the thumbnail so something lands, and warm the cache.
-        prefetchDragData(asset);
-        e.dataTransfer.setData("text/uri-list", asset.thumbnail || asset.url);
-      }
-    });
-  }
+  // ⚠️ QUALITY-CRITICAL: DRAG = PRESS.
+  // Native drag-and-drop into the slide is unreliable in the Office WebView and only ever
+  // transfers the low-res thumbnail. So a drag gesture just triggers the same full-quality
+  // insert as a click (cancel the native drag, then insertAsset). One reliable code path.
+  card.draggable = true;
+  card.addEventListener("dragstart", e => {
+    e.preventDefault();        // stop the lossy native drag
+    insertAsset(asset, card);  // …and insert exactly like a press
+  });
 
   // Thumbnail
   const thumb = document.createElement("div");
@@ -624,7 +667,7 @@ function makeCard(asset) {
   if (isAudio) {
     const ico = document.createElement("span");
     ico.className = "thumb-icon";
-    ico.textContent = "🎵";
+    ico.innerHTML = ICONS.audio;
     thumb.appendChild(ico);
   } else {
     const ske = document.createElement("div");
@@ -636,16 +679,29 @@ function makeCard(asset) {
     img.src = asset.thumbnail || asset.url;
     img.onload  = () => { img.classList.add("vis"); ske.remove(); };
     img.onerror = () => {
-      thumb.innerHTML = "";
+      ske.remove();
       const ico = document.createElement("span");
       ico.className = "thumb-icon";
-      ico.textContent = "🖼️";
-      thumb.appendChild(ico);
+      ico.innerHTML = ICONS.image;
+      thumb.insertBefore(ico, thumb.firstChild);
     };
 
     thumb.appendChild(ske);
     thumb.appendChild(img);
   }
+
+  // Type badge (PNG / SVG / MP3 …)
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.textContent = getExtFromName(asset.rawName || "");
+  thumb.appendChild(badge);
+
+  // Hover "add to slide" cue
+  const cue = document.createElement("span");
+  cue.className = "add-cue";
+  cue.setAttribute("aria-hidden", "true");
+  cue.innerHTML = ICONS.add;
+  thumb.appendChild(cue);
 
   // Info
   const info = document.createElement("div");
@@ -656,12 +712,7 @@ function makeCard(asset) {
   name.title     = asset.name;
   name.textContent = asset.name;
 
-  const extEl = document.createElement("div");
-  extEl.className = "ext";
-  extEl.textContent = getExtFromName(asset.rawName || "");
-
   info.appendChild(name);
-  info.appendChild(extEl);
 
   card.setAttribute("role", "button");
   card.setAttribute("tabindex", "0");
@@ -675,7 +726,19 @@ function makeCard(asset) {
 }
 
 // ─── Insert ────────────────────────────────────────────────────────────────────
+let inserting = false;  // guard: a drag gesture + click must not double-insert
+
 async function insertAsset(asset, card) {
+  if (inserting) return;
+  inserting = true;
+  try {
+    await doInsert(asset, card);
+  } finally {
+    inserting = false;
+  }
+}
+
+async function doInsert(asset, card) {
   if (asset.type === "audio") {
     await insertAudio(asset, card);
     return;
@@ -790,25 +853,6 @@ async function insertAudio(asset, card) {
   } else {
     try { Office.context.ui.openBrowserWindow(asset.url); } catch (_) { window.open(asset.url, "_blank"); }
     showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
-  }
-}
-
-// Prefetch the full-res file and cache it as an embeddable data URL for drag-and-drop.
-// Runs once per asset (on hover/press); the click path is unaffected.
-async function prefetchDragData(asset) {
-  if (asset._dragHtml || asset._dragLoading) return;
-  asset._dragLoading = true;
-  try {
-    const r = await fetch(asset.url, { mode: "cors" });
-    if (!r.ok) return;
-    const blob = await r.blob();
-    const b64  = await blobToBase64(blob);
-    const mime = blob.type || "image/png";
-    asset._dragHtml = `<img src="data:${mime};base64,${b64}" alt="">`;
-  } catch (_) {
-    /* drag will fall back to the thumbnail URL */
-  } finally {
-    asset._dragLoading = false;
   }
 }
 
