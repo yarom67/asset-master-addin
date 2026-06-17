@@ -91,6 +91,12 @@
       min-height: 14px;
     }
 
+    .hint {
+      font-size: 10.5px;
+      color: rgba(255, 255, 255, 0.62);
+      margin-top: 2px;
+    }
+
     /* ── Tabs ────────────────────────────────────────── */
     .tabs {
       display: flex;
@@ -171,7 +177,11 @@
       outline: none;
       transition: box-shadow var(--t), border-color var(--t);
       -webkit-tap-highlight-color: transparent;
+      -webkit-user-drag: none;
+      user-select: none;
     }
+
+    .card img, .thumb img { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
 
     .card:hover {
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
@@ -334,6 +344,7 @@
     <input id="q" type="text" placeholder="חפש נכסים..." autocomplete="off" spellcheck="false" aria-label="חיפוש נכסים">
   </div>
   <div class="count" id="cnt"></div>
+  <div class="hint">לחץ על נכס כדי להוסיפו לשקף באיכות מלאה</div>
 </div>
 
 <div class="tabs" id="tabs" role="tablist" aria-label="קטגוריות נכסים"></div>
@@ -576,6 +587,12 @@ function makeCard(asset) {
   const card  = document.createElement("div");
   card.className = "card";
 
+  // ⚠️ QUALITY-CRITICAL: block native drag. Dragging the card/thumbnail into the slide
+  // transfers only the rendered ~200px thumbnail bitmap (and rasterizes SVGs) → low
+  // quality. Full quality + native SVG vector only happen via the click → addImage path.
+  card.draggable = false;
+  card.addEventListener("dragstart", e => e.preventDefault());
+
   // Thumbnail
   const thumb = document.createElement("div");
   thumb.className = "thumb";
@@ -591,6 +608,7 @@ function makeCard(asset) {
 
     const img = document.createElement("img");
     img.alt = "";
+    img.draggable = false;
     img.src = asset.thumbnail || asset.url;
     img.onload  = () => { img.classList.add("vis"); ske.remove(); };
     img.onerror = () => {
