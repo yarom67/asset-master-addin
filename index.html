@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ספריית נכסים</title>
+  <!-- ⚠️ QUALITY-CRITICAL: must be lib/1/ (latest), NOT lib/1.1/. The old build does
+       not expose addImage/addAudioFromBase64 → insert breaks + SVG/quality degrade.
+       Do NOT change this line during UI/refactor work. See CLAUDE.md gotchas. -->
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -348,6 +351,13 @@ const ROOT_FOLDER_ID = "1kuLZ5Ayvn6Fdl7CK7o0qJWVQVumtE3VE";
 const GOOGLE_API_KEY = "%%GOOGLE_API_KEY%%";
 const DRIVE_API      = "https://www.googleapis.com/drive/v3/files";
 
+// ⚠️ QUALITY-CRITICAL: full-quality download endpoint. Must be `alt=media`.
+// NEVER use `drive.google.com/uc?export=download` — it returns a compressed/resized
+// copy → pixelated inserts. This is the single source of truth for the insert URL.
+function fileDownloadUrl(id) {
+  return `${DRIVE_API}/${id}?alt=media&key=${GOOGLE_API_KEY}`;
+}
+
 // ─── Folder → category mapping ────────────────────────────────────────────────
 const FOLDER_META = {
   "מוקאפים":    { icon: "🖥️", label: "מוקאפים" },
@@ -408,7 +418,7 @@ async function loadFromDrive() {
         id: f.id,
         name: f.name.replace(/\.[^.]+$/, ""),
         rawName: f.name,
-        url: `${DRIVE_API}/${f.id}?alt=media&key=${GOOGLE_API_KEY}`,
+        url: fileDownloadUrl(f.id),
         thumbnail: f.thumbnailLink
           ? f.thumbnailLink.replace(/=s\d+$/, "=s200")
           : `https://drive.google.com/thumbnail?id=${f.id}&sz=w200`,
@@ -561,7 +571,7 @@ function renderGrid() {
 
 // ─── Card ──────────────────────────────────────────────────────────────────────
 function makeCard(asset) {
-  const isAudio = asset.type === "audio" || asset.type === "sound";
+  const isAudio = asset.type === "audio";
 
   const card  = document.createElement("div");
   card.className = "card";
@@ -655,6 +665,20 @@ async function insertAsset(asset, card) {
   }
 }
 
+// Active slide = selected slide (API 1.5+) or first slide. Caller must load() shapes.
+async function getActiveSlide(ctx) {
+  try {
+    const sel = ctx.presentation.getSelectedSlides();
+    sel.load("items"); await ctx.sync();
+    if (sel.items.length) return sel.items[0];
+  } catch (_) { /* getSelectedSlides needs API 1.5 — fall through */ }
+
+  const slides = ctx.presentation.slides;
+  slides.load("items"); await ctx.sync();
+  if (!slides.items.length) throw new Error("אין שקפים במצגת");
+  return slides.items[0];
+}
+
 async function insertImageOnSlide(b64, dims) {
   const SLIDE_W = 720, SLIDE_H = 540;
   const imgW = Math.round(SLIDE_W * 0.4);
@@ -666,18 +690,9 @@ async function insertImageOnSlide(b64, dims) {
 
   try {
     await PowerPoint.run(async ctx => {
-      let slide;
-      try {
-        const sel = ctx.presentation.getSelectedSlides();
-        sel.load("items"); await ctx.sync();
-        slide = sel.items[0];
-      } catch (_) {
-        const slides = ctx.presentation.slides;
-        slides.load("items"); await ctx.sync();
-        if (!slides.items.length) throw new Error("אין שקפים במצגת");
-        slide = slides.items[0];
-      }
-
+      const slide = await getActiveSlide(ctx);
+      // ⚠️ QUALITY-CRITICAL: addImage takes pure base64 of the full-res file → native
+      // quality (and native SVG vector). Only fall back when it's truly unavailable.
       if (typeof slide.shapes.addImage !== "function") { useFallback = true; return; }
 
       const shape = slide.shapes.addImage(b64);
@@ -710,17 +725,7 @@ async function insertAudio(asset, card) {
   let apiAvailable = false;
   try {
     await PowerPoint.run(async ctx => {
-      let slide;
-      try {
-        const sel = ctx.presentation.getSelectedSlides();
-        sel.load("items"); await ctx.sync();
-        slide = sel.items[0];
-      } catch (_) {
-        const slides = ctx.presentation.slides;
-        slides.load("items"); await ctx.sync();
-        if (!slides.items.length) throw new Error("אין שקפים במצגת");
-        slide = slides.items[0];
-      }
+      const slide = await getActiveSlide(ctx);
       if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
 
       const r = await fetch(asset.url, { mode: "cors" });
