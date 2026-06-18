@@ -237,7 +237,8 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;     /* show the whole image — never crop/cut */
+      padding: 4px;
       opacity: 0;
       transition: opacity 0.22s, transform var(--t);
     }
@@ -308,8 +309,8 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
-      z-index: 1;          /* above cover img, below badge/bar */
+      object-fit: contain;   /* whole frame, not cropped */
+      z-index: 1;            /* above cover img, below badge/bar */
       opacity: 0;
       transition: opacity var(--t);
       pointer-events: none;
@@ -323,6 +324,7 @@
       left: 0; right: 0; bottom: 0;
       height: 3px;
       z-index: 3;
+      direction: ltr;        /* fill grows left→right, following the cursor (not RTL-reversed) */
       background: rgba(255,255,255,.28);
       opacity: 0;
       transition: opacity var(--t);
@@ -379,6 +381,7 @@
       left: 0; right: 0; bottom: 0;
       height: 3px;
       z-index: 3;
+      direction: ltr;        /* progress grows left→right */
       background: rgba(15,23,42,.10);
     }
     .prev-bar > i { display: block; height: 100%; width: 0%; background: var(--primary); }
@@ -720,7 +723,7 @@ function renderGrid() {
 
 // ─── SVG icons (Lucide-style, no emoji) ─────────────────────────────────────────
 const ICONS = {
-  audio: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+  audio: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="4" y2="15"/><line x1="8" y1="6" x2="8" y2="18"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="16" y1="6" x2="16" y2="18"/><line x1="20" y1="9" x2="20" y2="15"/></svg>`,
   image: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>`,
   video: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>`,
   add:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>`,
@@ -1026,40 +1029,48 @@ async function insertAudio(asset, card) {
   }
 }
 
+// Higher-res poster for inserting a video's cover frame.
+function posterUrl(asset) {
+  const t = asset.thumbnail || "";
+  if (/=s\d+$/.test(t))        return t.replace(/=s\d+$/, "=s1600");
+  if (/[?&]sz=w\d+/.test(t))   return t.replace(/sz=w\d+/, "sz=w1600");
+  return t || asset.url;
+}
+
 async function insertVideo(asset, card) {
   showStatus("⏳ מכניס וידאו...", "inf", false);
-  let apiOk = false;
+
+  // 1) Use a native base64 video insert if the host ever exposes one.
   try {
+    let apiOk = false;
     await PowerPoint.run(async ctx => {
       const slide = await getActiveSlide(ctx);
-      // PowerPoint JS API has no reliable base64 video insert today; use it if present.
       if (typeof slide.shapes.addVideoFromBase64 !== "function") return;
       const r = await fetch(asset.url, { mode: "cors" });
-      if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const b64 = await blobToBase64(await r.blob());
       slide.shapes.addVideoFromBase64(b64, "MP4");
       await ctx.sync();
       apiOk = true;
     });
-  } catch (_) { /* fall through to manual path */ }
+    if (apiOk) {
+      card.classList.add("ins"); setTimeout(() => card.classList.remove("ins"), 550);
+      showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
+      return;
+    }
+  } catch (_) { /* fall through */ }
 
-  if (apiOk) {
-    card.classList.add("ins");
-    setTimeout(() => card.classList.remove("ins"), 550);
-    showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
-    return;
-  }
-
-  // Fallback: download full-res file (panel referrer → API key OK), then insert manually.
+  // 2) PowerPoint has no video-embed API → drop the cover frame as an image, on-slide,
+  //    exactly like a picture (no download, no other wizard).
   try {
-    const r = await fetch(asset.url, { mode: "cors" });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const u = URL.createObjectURL(await r.blob());
-    const a = document.createElement("a");
-    a.href = u; a.download = asset.rawName || (asset.name + ".mp4");
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(u), 30000);
-    showStatus("⬇️ הקובץ הורד. הכנס ידנית: הוספה ← וידאו ← וידאו במחשב שלי", "inf");
+    const r = await fetch(posterUrl(asset), { mode: "cors" });
+    if (!r.ok) throw new Error(`לא ניתן לטעון כיסוי (HTTP ${r.status})`);
+    const blob = await r.blob();
+    const dims = await getImgDims(URL.createObjectURL(blob));
+    const b64  = await blobToBase64(blob);
+    await insertImageOnSlide(b64, dims);
+    card.classList.add("ins"); setTimeout(() => card.classList.remove("ins"), 550);
+    showStatus(`🖼️ תמונת כיסוי של "${asset.name}" הוכנסה לשקף`, "ok");
   } catch (e) {
     showStatus(`❌ ${e.message || "שגיאת וידאו"}`, "err");
   }
