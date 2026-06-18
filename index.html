@@ -1016,48 +1016,17 @@ async function insertAudio(asset, card) {
   }
 }
 
-// Higher-res poster for inserting a video's cover frame.
-function posterUrl(asset) {
-  const t = asset.thumbnail || "";
-  if (/=s\d+$/.test(t))        return t.replace(/=s\d+$/, "=s1600");
-  if (/[?&]sz=w\d+/.test(t))   return t.replace(/sz=w\d+/, "sz=w1600");
-  return t || asset.url;
-}
-
+// PowerPoint add-ins can't place a playable video on a slide (no API), so download the
+// original full-res MP4 (panel referrer → API key OK) and instruct manual Insert → Video.
 async function insertVideo(asset, card) {
-  showStatus("⏳ מכניס וידאו...", "inf", false);
-
-  // 1) Use a native base64 video insert if the host ever exposes one.
+  showStatus("⏳ מוריד וידאו...", "inf", false);
   try {
-    let apiOk = false;
-    await PowerPoint.run(async ctx => {
-      const slide = await getActiveSlide(ctx);
-      if (typeof slide.shapes.addVideoFromBase64 !== "function") return;
-      const r = await fetch(asset.url, { mode: "cors" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const b64 = await blobToBase64(await r.blob());
-      slide.shapes.addVideoFromBase64(b64, "MP4");
-      await ctx.sync();
-      apiOk = true;
-    });
-    if (apiOk) {
-      card.classList.add("ins"); setTimeout(() => card.classList.remove("ins"), 550);
-      showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
-      return;
-    }
-  } catch (_) { /* fall through */ }
-
-  // 2) PowerPoint has no video-embed API → drop the cover frame as an image, on-slide,
-  //    exactly like a picture (no download, no other wizard).
-  try {
-    const r = await fetch(posterUrl(asset), { mode: "cors" });
-    if (!r.ok) throw new Error(`לא ניתן לטעון כיסוי (HTTP ${r.status})`);
-    const blob = await r.blob();
-    const dims = await getImgDims(URL.createObjectURL(blob));
-    const b64  = await blobToBase64(blob);
-    await insertImageOnSlide(b64, dims);
+    const u = await mediaBlobUrl(asset);   // cached full-res blob
+    const a = document.createElement("a");
+    a.href = u; a.download = asset.rawName || (asset.name + ".mp4");
+    document.body.appendChild(a); a.click(); a.remove();
     card.classList.add("ins"); setTimeout(() => card.classList.remove("ins"), 550);
-    showStatus(`🖼️ תמונת כיסוי של "${asset.name}" הוכנסה לשקף`, "ok");
+    showStatus("⬇️ הוורד. הכנס ידנית: הוספה ← וידאו ← וידאו במחשב שלי", "inf");
   } catch (e) {
     showStatus(`❌ ${e.message || "שגיאת וידאו"}`, "err");
   }
