@@ -138,7 +138,7 @@
     }
 
     .tab.on {
-      color: var(--primary-fg, #fff);
+      color: var(--primary-fg);
       background: var(--primary);
       font-weight: 600;
       box-shadow: 0 1px 4px rgba(0, 120, 212, 0.32);
@@ -300,8 +300,6 @@
     }
     .add-cue svg { width: 26px; height: 26px; color: #fff; filter: drop-shadow(0 1px 3px rgba(0,0,0,.35)); }
     .card:hover .add-cue { opacity: 1; }
-    /* on a video card, the scrub frame is the affordance — hide the + cue */
-    .card.is-video:hover .add-cue { opacity: 0; }
 
     /* ── Video scrub ─────────────────────────────────── */
     .scrub-video {
@@ -334,25 +332,6 @@
       background: var(--primary);
     }
     .card.is-video:hover .scrub-bar { opacity: 1; }
-
-    .scrub-hint {
-      position: absolute;
-      bottom: 6px;
-      inset-inline-end: 6px;
-      z-index: 3;
-      padding: 2px 7px;
-      font-size: 9.5px;
-      font-weight: 500;
-      color: #fff;
-      background: rgba(15,23,42,.62);
-      border-radius: 6px;
-      backdrop-filter: blur(3px);
-      -webkit-backdrop-filter: blur(3px);
-      pointer-events: none;
-      opacity: 1;
-      transition: opacity var(--t);
-    }
-    .card.is-video:hover .scrub-hint { opacity: 0; }
 
     /* ── Audio / media preview button ────────────────── */
     .prev-btn {
@@ -790,8 +769,8 @@ function makeCard(asset) {
   if (isVideo)      attachScrub(thumb, asset);
   else if (isAudio) attachAudioPreview(thumb, asset, card);
 
-  // Hover "add to slide" cue (images + video; video hides it while scrubbing)
-  if (!isAudio) {
+  // Hover "add to slide" cue (images only; video shows the scrub frame, audio the play btn)
+  if (!isAudio && !isVideo) {
     const cue = document.createElement("span");
     cue.className = "add-cue";
     cue.setAttribute("aria-hidden", "true");
@@ -821,33 +800,40 @@ function makeCard(asset) {
   return card;
 }
 
+// Drive `alt=media` doesn't stream to <audio>/<video> (no Range → no seek/playback),
+// so download once and hand the element a local blob URL. Cached per asset.
+function mediaBlobUrl(asset) {
+  if (!asset._blobUrl) {
+    asset._blobUrl = fetch(asset.url, { mode: "cors" })
+      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.blob(); })
+      .then(b => URL.createObjectURL(b));
+  }
+  return asset._blobUrl;
+}
+
 // ─── Video scrub: hover the thumbnail, move across it to seek through the clip ──
 function attachScrub(thumb, asset) {
   const bar  = document.createElement("div"); bar.className = "scrub-bar"; bar.innerHTML = "<i></i>";
   const fill = bar.firstChild;
-  const hint = document.createElement("span"); hint.className = "scrub-hint"; hint.textContent = "החלק לתצוגה";
   thumb.appendChild(bar);
-  thumb.appendChild(hint);
 
   let video = null;
-  function ensureVideo() {
-    if (video) return video;
+  async function ensureVideo() {
+    if (video) return;
     video = document.createElement("video");
     video.className = "scrub-video";
-    video.muted = true; video.playsInline = true; video.preload = "metadata";
-    video.src = asset.url;                 // full-res mp4 (panel referrer → API key allowed)
+    video.muted = true; video.playsInline = true; video.preload = "auto";
     thumb.insertBefore(video, thumb.querySelector(".badge"));
-    return video;
+    try { video.src = await mediaBlobUrl(asset); } catch (_) { /* keep cover */ }
   }
 
   thumb.addEventListener("pointerenter", ensureVideo);
   thumb.addEventListener("pointermove", e => {
-    const v = ensureVideo();
-    if (!v.duration || isNaN(v.duration)) return;
+    if (!video || !video.duration || isNaN(video.duration)) return;
     const rect = thumb.getBoundingClientRect();
     const p = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    v.currentTime = p * v.duration;
-    v.classList.add("show");
+    video.currentTime = p * video.duration;
+    video.classList.add("show");
     fill.style.width = (p * 100) + "%";
   });
   thumb.addEventListener("pointerleave", () => {
@@ -867,7 +853,6 @@ function stopPreview() {
 function attachAudioPreview(thumb, asset, card) {
   const audio = document.createElement("audio");
   audio.preload = "none";
-  audio.src = asset.url;
 
   const btn = document.createElement("button");
   btn.type = "button";
@@ -885,14 +870,16 @@ function attachAudioPreview(thumb, asset, card) {
     card.classList.remove("playing"); btn.innerHTML = ICONS.play; fill.style.width = "0%"; currentPreview = null;
   });
 
-  btn.addEventListener("click", e => {
+  btn.addEventListener("click", async e => {
     e.stopPropagation(); e.preventDefault();   // preview only — don't insert
     if (!audio.paused) { stopPreview(); return; }
     stopPreview();
-    audio.play().then(() => {
+    try {
+      if (!audio.src) audio.src = await mediaBlobUrl(asset);
+      await audio.play();
       card.classList.add("playing"); btn.innerHTML = ICONS.pause;
       currentPreview = { audio, card, btn };
-    }).catch(() => showStatus("❌ לא ניתן לנגן תצוגה מקדימה", "err"));
+    } catch (_) { showStatus("❌ לא ניתן לנגן תצוגה מקדימה", "err"); }
   });
 
   thumb.appendChild(audio);
