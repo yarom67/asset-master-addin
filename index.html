@@ -586,7 +586,33 @@ Office.onReady(() => {
       renderGrid();
     }, 300);
   });
+
+  // 🔧 TEMP DIAGNOSTIC v2: click the title to test fetch of the REAL assets.
+  const h1 = document.querySelector(".hdr h1");
+  if (h1) h1.addEventListener("click", diagMedia);
 });
+
+// 🔧 TEMP DIAGNOSTIC v2 — remove after debugging insert "Load failed".
+async function diagMedia() {
+  const out = ["origin " + location.origin, ""];
+  const cats = (data && data.categories) || [];
+  const pick = t => { for (const c of cats) for (const a of (c.assets || [])) if (a.type === t) return a; return null; };
+  for (const t of ["image", "audio", "video"]) {
+    const a = pick(t);
+    if (!a) { out.push(`${t}: (none in library)`); continue; }
+    out.push(`${t}: ${a.rawName}`);
+    try {
+      const r = await fetch(a.url, { mode: "cors" });
+      out.push(`  cors: HTTP ${r.status} type=${r.type} redirected=${r.redirected} ct=${r.headers.get("content-type") || "?"}`);
+    } catch (e) { out.push(`  cors: ERR ${e.name}: ${e.message}`); }
+    try {
+      const r2 = await fetch(a.url, { mode: "cors", redirect: "manual" });
+      out.push(`  manual: type=${r2.type} status=${r2.status}`);
+    } catch (e) { out.push(`  manual: ERR ${e.name}: ${e.message}`); }
+    out.push("");
+  }
+  setBody(`<div class="empty" style="text-align:left;direction:ltr;font-size:11px;white-space:pre-wrap;line-height:1.5">${esc(out.join("\n"))}</div>`);
+}
 
 // ─── Load assets ──────────────────────────────────────────────────────────────
 async function load() {
