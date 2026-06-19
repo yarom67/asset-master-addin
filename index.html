@@ -725,6 +725,7 @@ function makeCard(asset) {
   card.draggable = true;
   card.addEventListener("dragstart", e => {
     e.preventDefault();        // stop the lossy native drag
+    if (e.target.closest(".prev-btn")) return;  // audio preview button ≠ insert
     insertAsset(asset, card);  // …and insert exactly like a press
   });
 
@@ -875,7 +876,10 @@ function attachAudioPreview(thumb, asset, card) {
       await audio.play();
       card.classList.add("playing"); btn.innerHTML = ICONS.pause;
       currentPreview = { audio, card, btn };
-    } catch (_) { showStatus("❌ לא ניתן לנגן תצוגה מקדימה", "err"); }
+    } catch (_) {
+      audio.removeAttribute("src"); audio.load();   // drop the bad source so a retry re-fetches
+      showStatus("❌ לא ניתן לנגן תצוגה מקדימה", "err");
+    }
   });
 
   thumb.appendChild(audio);
@@ -991,6 +995,8 @@ async function insertAudio(asset, card) {
 
       const r = await fetch(streamUrl(asset), { mode: "cors" });
       if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
+      if ((r.headers.get("content-type") || "").includes("text/html"))
+        throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
       const b64 = await blobToBase64(await r.blob());
 
       slide.shapes.addAudioFromBase64(b64, { isLooping: false, isPlaying: false });
@@ -1019,6 +1025,8 @@ async function insertVideo(asset, card) {
   try {
     const r = await fetch(streamUrl(asset), { mode: "cors" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if ((r.headers.get("content-type") || "").includes("text/html"))
+      throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
     const u = URL.createObjectURL(await r.blob());
     const a = document.createElement("a");
     a.href = u; a.download = asset.rawName || (asset.name + ".mp4");
