@@ -586,41 +586,7 @@ Office.onReady(() => {
       renderGrid();
     }, 300);
   });
-
-  // 🔧 TEMP DIAGNOSTIC: click the title to test which media URL the WebView allows.
-  const h1 = document.querySelector(".hdr h1");
-  if (h1) h1.addEventListener("click", diagMedia);
 });
-
-// 🔧 TEMP DIAGNOSTIC — remove after debugging media playback.
-async function diagMedia() {
-  const id = "1m8obBmbEpgx1vxbM8KUZydIB3xqRY5lF"; // a real public mp3 in the lib
-  const tests = [
-    ["googleapis alt=media", `${DRIVE_API}/${id}?alt=media&key=${GOOGLE_API_KEY}`],
-    ["usercontent download", `https://drive.usercontent.google.com/download?id=${id}&export=download`],
-    ["drive uc download",    `https://drive.google.com/uc?export=download&id=${id}`],
-  ];
-  const out = ["origin: " + location.origin, ""];
-  for (const [name, url] of tests) {
-    try {
-      const r = await fetch(url, { mode: "cors" });
-      out.push(`${name}: HTTP ${r.status} | ${r.headers.get("content-type") || "?"} | len ${r.headers.get("content-length") || "?"}`);
-    } catch (e) {
-      out.push(`${name}: ERR ${e.name}: ${e.message}`);
-    }
-  }
-  // also test <audio> playback (this click is the user gesture)
-  for (const [name, url] of [["audio googleapis", `${DRIVE_API}/${id}?alt=media&key=${GOOGLE_API_KEY}`], ["audio usercontent", `https://drive.usercontent.google.com/download?id=${id}&export=download`]]) {
-    try {
-      const a = new Audio(url);
-      await a.play(); a.pause();
-      out.push(`${name}: PLAY OK`);
-    } catch (e) {
-      out.push(`${name}: PLAY ${e.name}: ${e.message}`);
-    }
-  }
-  setBody(`<div class="empty" style="text-align:left;direction:ltr;font-size:11px;white-space:pre-wrap;line-height:1.5">${esc(out.join("\n"))}</div>`);
-}
 
 // ─── Load assets ──────────────────────────────────────────────────────────────
 async function load() {
@@ -835,13 +801,6 @@ function makeCard(asset) {
   return card;
 }
 
-// Audio/video stream URL. `alt=media` (googleapis) redirects + CORS-fails for large
-// files; drive.usercontent serves media with Range + CORS:* and no re-encode. Public files.
-// ponytail: images stay on alt=media (fileDownloadUrl) — usercontent re-encodes images.
-function streamUrl(asset) {
-  return `https://drive.usercontent.google.com/download?id=${asset.id}&export=download`;
-}
-
 // ─── Video scrub: hover the thumbnail, move across it to seek through the clip ──
 function attachScrub(thumb, asset) {
   const bar  = document.createElement("div"); bar.className = "scrub-bar"; bar.innerHTML = "<i></i>";
@@ -854,7 +813,7 @@ function attachScrub(thumb, asset) {
     video = document.createElement("video");
     video.className = "scrub-video";
     video.muted = true; video.playsInline = true; video.preload = "auto";
-    video.src = streamUrl(asset);   // streams with Range → seekable
+    video.src = asset.url;   // streams with Range → seekable
     thumb.insertBefore(video, thumb.querySelector(".badge"));
   }
 
@@ -906,7 +865,7 @@ function attachAudioPreview(thumb, asset, card) {
     if (!audio.paused) { stopPreview(); return; }
     stopPreview();
     try {
-      if (!audio.src) audio.src = streamUrl(asset);
+      if (!audio.src) audio.src = asset.url;
       await audio.play();
       card.classList.add("playing"); btn.innerHTML = ICONS.pause;
       currentPreview = { audio, card, btn };
@@ -1027,10 +986,8 @@ async function insertAudio(asset, card) {
       const slide = await getActiveSlide(ctx);
       if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
 
-      const r = await fetch(streamUrl(asset), { mode: "cors" });
+      const r = await fetch(asset.url, { mode: "cors" });
       if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
-      if ((r.headers.get("content-type") || "").includes("text/html"))
-        throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
       const b64 = await blobToBase64(await r.blob());
 
       slide.shapes.addAudioFromBase64(b64, { isLooping: false, isPlaying: false });
@@ -1057,10 +1014,8 @@ async function insertAudio(asset, card) {
 async function insertVideo(asset, card) {
   showStatus("⏳ מוריד וידאו...", "inf", false);
   try {
-    const r = await fetch(streamUrl(asset), { mode: "cors" });
+    const r = await fetch(asset.url, { mode: "cors" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    if ((r.headers.get("content-type") || "").includes("text/html"))
-      throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
     const u = URL.createObjectURL(await r.blob());
     const a = document.createElement("a");
     a.href = u; a.download = asset.rawName || (asset.name + ".mp4");
