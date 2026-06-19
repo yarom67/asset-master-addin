@@ -586,7 +586,41 @@ Office.onReady(() => {
       renderGrid();
     }, 300);
   });
+
+  // 🔧 TEMP DIAGNOSTIC: click the title to test which media URL the WebView allows.
+  const h1 = document.querySelector(".hdr h1");
+  if (h1) h1.addEventListener("click", diagMedia);
 });
+
+// 🔧 TEMP DIAGNOSTIC — remove after debugging media playback.
+async function diagMedia() {
+  const id = "1m8obBmbEpgx1vxbM8KUZydIB3xqRY5lF"; // a real public mp3 in the lib
+  const tests = [
+    ["googleapis alt=media", `${DRIVE_API}/${id}?alt=media&key=${GOOGLE_API_KEY}`],
+    ["usercontent download", `https://drive.usercontent.google.com/download?id=${id}&export=download`],
+    ["drive uc download",    `https://drive.google.com/uc?export=download&id=${id}`],
+  ];
+  const out = ["origin: " + location.origin, ""];
+  for (const [name, url] of tests) {
+    try {
+      const r = await fetch(url, { mode: "cors" });
+      out.push(`${name}: HTTP ${r.status} | ${r.headers.get("content-type") || "?"} | len ${r.headers.get("content-length") || "?"}`);
+    } catch (e) {
+      out.push(`${name}: ERR ${e.name}: ${e.message}`);
+    }
+  }
+  // also test <audio> playback (this click is the user gesture)
+  for (const [name, url] of [["audio googleapis", `${DRIVE_API}/${id}?alt=media&key=${GOOGLE_API_KEY}`], ["audio usercontent", `https://drive.usercontent.google.com/download?id=${id}&export=download`]]) {
+    try {
+      const a = new Audio(url);
+      await a.play(); a.pause();
+      out.push(`${name}: PLAY OK`);
+    } catch (e) {
+      out.push(`${name}: PLAY ${e.name}: ${e.message}`);
+    }
+  }
+  setBody(`<div class="empty" style="text-align:left;direction:ltr;font-size:11px;white-space:pre-wrap;line-height:1.5">${esc(out.join("\n"))}</div>`);
+}
 
 // ─── Load assets ──────────────────────────────────────────────────────────────
 async function load() {
