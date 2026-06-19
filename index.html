@@ -800,15 +800,11 @@ function makeCard(asset) {
   return card;
 }
 
-// Drive `alt=media` doesn't stream to <audio>/<video> (no Range → no seek/playback),
-// so download once and hand the element a local blob URL. Cached per asset.
-function mediaBlobUrl(asset) {
-  if (!asset._blobUrl) {
-    asset._blobUrl = fetch(asset.url, { mode: "cors" })
-      .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.blob(); })
-      .then(b => URL.createObjectURL(b));
-  }
-  return asset._blobUrl;
+// Audio/video stream URL. `alt=media` (googleapis) redirects + CORS-fails for large
+// files; drive.usercontent serves media with Range + CORS:* and no re-encode. Public files.
+// ponytail: images stay on alt=media (fileDownloadUrl) — usercontent re-encodes images.
+function streamUrl(asset) {
+  return `https://drive.usercontent.google.com/download?id=${asset.id}&export=download`;
 }
 
 // ─── Video scrub: hover the thumbnail, move across it to seek through the clip ──
@@ -818,13 +814,13 @@ function attachScrub(thumb, asset) {
   thumb.appendChild(bar);
 
   let video = null;
-  async function ensureVideo() {
+  function ensureVideo() {
     if (video) return;
     video = document.createElement("video");
     video.className = "scrub-video";
     video.muted = true; video.playsInline = true; video.preload = "auto";
+    video.src = streamUrl(asset);   // streams with Range → seekable
     thumb.insertBefore(video, thumb.querySelector(".badge"));
-    try { video.src = await mediaBlobUrl(asset); } catch (_) { /* keep cover */ }
   }
 
   thumb.addEventListener("pointerenter", ensureVideo);
@@ -875,7 +871,7 @@ function attachAudioPreview(thumb, asset, card) {
     if (!audio.paused) { stopPreview(); return; }
     stopPreview();
     try {
-      if (!audio.src) audio.src = await mediaBlobUrl(asset);
+      if (!audio.src) audio.src = streamUrl(asset);
       await audio.play();
       card.classList.add("playing"); btn.innerHTML = ICONS.pause;
       currentPreview = { audio, card, btn };
@@ -993,7 +989,7 @@ async function insertAudio(asset, card) {
       const slide = await getActiveSlide(ctx);
       if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
 
-      const r = await fetch(asset.url, { mode: "cors" });
+      const r = await fetch(streamUrl(asset), { mode: "cors" });
       if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
       const b64 = await blobToBase64(await r.blob());
 
@@ -1021,10 +1017,13 @@ async function insertAudio(asset, card) {
 async function insertVideo(asset, card) {
   showStatus("⏳ מוריד וידאו...", "inf", false);
   try {
-    const u = await mediaBlobUrl(asset);   // cached full-res blob
+    const r = await fetch(streamUrl(asset), { mode: "cors" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const u = URL.createObjectURL(await r.blob());
     const a = document.createElement("a");
     a.href = u; a.download = asset.rawName || (asset.name + ".mp4");
     document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 30000);
     card.classList.add("ins"); setTimeout(() => card.classList.remove("ins"), 550);
     showStatus("⬇️ הוורד. הכנס ידנית: הוספה ← וידאו ← וידאו במחשב שלי", "inf");
   } catch (e) {
