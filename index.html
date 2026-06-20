@@ -801,9 +801,8 @@ function makeCard(asset) {
   return card;
 }
 
-// Audio/video stream URL. `alt=media` (googleapis) redirects + CORS-fails for large
-// files; drive.usercontent serves media with Range + CORS:* and no re-encode. Public files.
-// ponytail: images stay on alt=media (fileDownloadUrl) — usercontent re-encodes images.
+// drive.usercontent download URL: serves the original bytes with Range + CORS:*, no redirect
+// for media; used for audio/video download and as the raster-image fetch source.
 function streamUrl(asset) {
   return `https://drive.usercontent.google.com/download?id=${asset.id}&export=download`;
 }
@@ -934,19 +933,34 @@ function lh3Full(asset) {
 
 async function getImageData(asset) {
   const isSvg = /\.svg$/i.test(asset.rawName || asset.name);
-  // Path 1: fetch the exact file (best — original bytes + native SVG vector). Blocked in the
-  // Office WebView (CORS), kept for hosts/versions where fetch works.
+
+  // SVG must insert as VECTOR → it needs the raw source bytes (lh3 only serves a raster
+  // preview, so canvas is not acceptable here). Small SVGs come back 200 + CORS from BOTH
+  // alt=media (asset.url) and usercontent — try both.
+  if (isSvg) {
+    let last;
+    for (const url of [asset.url, streamUrl(asset)]) {
+      try {
+        const r = await fetch(url, { mode: "cors" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const blob = await r.blob();
+        if ((blob.type || "").includes("text/html")) throw new Error("לא משותף לציבור");
+        return { b64: await blobToBase64(blob), dims: await getSvgDims(blob) };
+      } catch (e) { last = e; }
+    }
+    throw new Error(`[svg] ${last?.name || ""}:${last?.message || last}`);
+  }
+
+  // Raster: exact bytes via fetch; if the WebView blocks it, fall back to lh3 =s0 → canvas
+  // (lh3 serves the original bytes with CORS:* and is the host the thumbnails already load).
   try {
     const r = await fetch(streamUrl(asset), { mode: "cors" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     if ((r.headers.get("content-type") || "").includes("text/html"))
-      throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
+      throw new Error("לא משותף לציבור");
     const blob = await r.blob();
-    const svg  = isSvg || blob.type === "image/svg+xml";
-    const dims = svg ? await getSvgDims(blob) : await getImgDims(URL.createObjectURL(blob));
-    return { b64: await blobToBase64(blob), dims };
+    return { b64: await blobToBase64(blob), dims: await getImgDims(URL.createObjectURL(blob)) };
   } catch (eFetch) {
-    // Path 2: lh3 =s0 (original bytes, CORS:*, same host as the working thumbnails) → canvas.
     const url = lh3Full(asset);
     if (!url) throw new Error(`[load] fetch:${eFetch.name||""}:${eFetch.message||eFetch} | no-lh3`);
     try {
