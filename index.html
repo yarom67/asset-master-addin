@@ -900,27 +900,68 @@ async function insertAsset(asset, card) {
   }
 }
 
+// Audio & video: user wants a plain download (Finder), NOT slide insert. Opening the
+// usercontent export=download URL makes Google serve Content-Disposition: attachment →
+// the browser/Finder downloads it. No fetch / blob / CORS / base64 → no "Load failed".
+function downloadAsset(asset, card) {
+  const url = streamUrl(asset);
+  try { Office.context.ui.openBrowserWindow(url); }
+  catch (_) {
+    const a = document.createElement("a");
+    a.href = url; a.target = "_blank"; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  if (card) { card.classList.add("ins"); setTimeout(() => card.classList.remove("ins"), 550); }
+  const hint = asset.type === "video"
+    ? "⬇️ מוריד וידאו. להוספה לשקף: הוספה ← וידאו ← וידאו במחשב שלי"
+    : "⬇️ מוריד שמע. להוספה לשקף: הוספה ← שמע ← שמע במחשב שלי";
+  showStatus(hint, "inf");
+}
+
+// Image bytes for slide insert. Path 1 = fetch (exact bytes + native SVG vector). If the
+// WebView blocks fetch/CORS, Path 2 = <img crossorigin> → canvas → PNG base64: loads the
+// image as a tag (no Origin header, exactly how the thumbnails load) and never calls fetch.
+// Path 2 rasterizes SVG, but a rasterized insert beats a failed one.
+async function getImageData(asset) {
+  const isSvg = /\.svg$/i.test(asset.rawName || asset.name);
+  try {
+    const r = await fetch(streamUrl(asset), { mode: "cors" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if ((r.headers.get("content-type") || "").includes("text/html"))
+      throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
+    const blob = await r.blob();
+    const svg  = isSvg || blob.type === "image/svg+xml";
+    const dims = svg ? await getSvgDims(blob) : await getImgDims(URL.createObjectURL(blob));
+    return { b64: await blobToBase64(blob), dims };
+  } catch (eFetch) {
+    return await imgToBase64ViaCanvas(streamUrl(asset));   // fetch blocked → tag+canvas
+  }
+}
+
+function imgToBase64ViaCanvas(url) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";   // usercontent sends CORS:* → canvas not tainted
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0);
+      try { res({ b64: c.toDataURL("image/png").split(",")[1], dims: { w, h } }); }
+      catch (e) { rej(new Error("שגיאת המרת תמונה")); }
+    };
+    img.onerror = () => rej(new Error("טעינת התמונה נכשלה"));
+    img.src = url;
+  });
+}
+
 async function doInsert(asset, card) {
-  if (asset.type === "audio") { await insertAudio(asset, card); return; }
-  if (asset.type === "video") { await insertVideo(asset, card); return; }
+  if (asset.type === "audio" || asset.type === "video") { downloadAsset(asset, card); return; }
 
   showStatus("⏳ מכניס לשקף...", "inf", false);
 
   try {
-    // alt=media (asset.url) serves NO CORS header → fetch(mode:cors) rejects with
-    // "Load failed" in the Office WebView (curl sees 403; WebKit fails it before status).
-    // usercontent (streamUrl) returns 200 + Access-Control-Allow-Origin:* + the original
-    // bytes, no re-encode — verified against live Drive files. Keep image insert on streamUrl.
-    const r = await fetch(streamUrl(asset), { mode: "cors" });
-    if (!r.ok) throw new Error(`לא ניתן להוריד את הקובץ (HTTP ${r.status})`);
-    if ((r.headers.get("content-type") || "").includes("text/html"))
-      throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
-    const blob = await r.blob();
-
-    const isSvg = /\.svg$/i.test(asset.rawName || asset.name) || blob.type === "image/svg+xml";
-    const dims  = isSvg ? await getSvgDims(blob) : await getImgDims(URL.createObjectURL(blob));
-    const b64   = await blobToBase64(blob);
-
+    const { b64, dims } = await getImageData(asset);
     await insertImageOnSlide(b64, dims);
 
     card.classList.add("ins");
@@ -989,60 +1030,6 @@ async function insertImageOnSlide(b64, dims) {
       ? rej(new Error(r.error.message || "שגיאה בהכנסת תמונה"))
       : res());
   });
-}
-
-async function insertAudio(asset, card) {
-  showStatus("⏳ מכניס סאונד...", "inf", false);
-  let apiAvailable = false;
-  try {
-    await PowerPoint.run(async ctx => {
-      const slide = await getActiveSlide(ctx);
-      if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
-
-      const r = await fetch(streamUrl(asset), { mode: "cors" });
-      if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
-      if ((r.headers.get("content-type") || "").includes("text/html"))
-        throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
-      const b64 = await blobToBase64(await r.blob());
-
-      slide.shapes.addAudioFromBase64(b64, { isLooping: false, isPlaying: false });
-      await ctx.sync();
-      apiAvailable = true;
-    });
-  } catch (e) {
-    showStatus(`❌ ${e.message || "שגיאת סאונד"}`, "err");
-    return;
-  }
-
-  if (apiAvailable) {
-    card.classList.add("ins");
-    setTimeout(() => card.classList.remove("ins"), 550);
-    showStatus(`✅ "${asset.name}" הוכנס לשקף`, "ok");
-  } else {
-    try { Office.context.ui.openBrowserWindow(asset.url); } catch (_) { window.open(asset.url, "_blank"); }
-    showStatus("⬇️ שמור את הקובץ והכנס ידנית: הוספה ← שמע ← שמע במחשב שלי", "inf");
-  }
-}
-
-// PowerPoint add-ins can't place a playable video on a slide (no API), so download the
-// original full-res MP4 (panel referrer → API key OK) and instruct manual Insert → Video.
-async function insertVideo(asset, card) {
-  showStatus("⏳ מוריד וידאו...", "inf", false);
-  try {
-    const r = await fetch(streamUrl(asset), { mode: "cors" });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    if ((r.headers.get("content-type") || "").includes("text/html"))
-      throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
-    const u = URL.createObjectURL(await r.blob());
-    const a = document.createElement("a");
-    a.href = u; a.download = asset.rawName || (asset.name + ".mp4");
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(u), 30000);
-    card.classList.add("ins"); setTimeout(() => card.classList.remove("ins"), 550);
-    showStatus("⬇️ הוורד. הכנס ידנית: הוספה ← וידאו ← וידאו במחשב שלי", "inf");
-  } catch (e) {
-    showStatus(`❌ ${e.message || "שגיאת וידאו"}`, "err");
-  }
 }
 
 async function getSvgDims(blob) {
