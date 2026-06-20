@@ -449,7 +449,7 @@
       <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
       <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
     </svg>
-    ספריית נכסים <span style="font-size:9px;opacity:.55;font-weight:400">v19i</span>
+    ספריית נכסים
   </h1>
   <div class="search-wrap" role="search">
     <span class="search-icon" aria-hidden="true">
@@ -484,14 +484,6 @@ const DRIVE_API      = "https://www.googleapis.com/drive/v3/files";
 // copy → pixelated inserts. This is the single source of truth for the insert URL.
 function fileDownloadUrl(id) {
   return `${DRIVE_API}/${id}?alt=media&key=${GOOGLE_API_KEY}`;
-}
-
-// Direct usercontent URL for audio/video fetch-based inserts.
-// alt=media redirects to usercontent for large files — that redirect chain breaks
-// fetch CORS in WKWebView. This URL hits usercontent directly, no redirect.
-// Only for publicly shared files (no API key needed). Images stay on alt=media.
-function ucDownloadUrl(id) {
-  return `https://drive.usercontent.google.com/download?id=${id}&export=download`;
 }
 
 // ─── Folder → category mapping ────────────────────────────────────────────────
@@ -809,6 +801,13 @@ function makeCard(asset) {
   return card;
 }
 
+// Audio/video stream URL. `alt=media` (googleapis) redirects + CORS-fails for large
+// files; drive.usercontent serves media with Range + CORS:* and no re-encode. Public files.
+// ponytail: images stay on alt=media (fileDownloadUrl) — usercontent re-encodes images.
+function streamUrl(asset) {
+  return `https://drive.usercontent.google.com/download?id=${asset.id}&export=download`;
+}
+
 // ─── Video scrub: hover the thumbnail, move across it to seek through the clip ──
 function attachScrub(thumb, asset) {
   const bar  = document.createElement("div"); bar.className = "scrub-bar"; bar.innerHTML = "<i></i>";
@@ -821,7 +820,7 @@ function attachScrub(thumb, asset) {
     video = document.createElement("video");
     video.className = "scrub-video";
     video.muted = true; video.playsInline = true; video.preload = "auto";
-    video.src = asset.url;   // streams with Range → seekable
+    video.src = streamUrl(asset);   // streams with Range → seekable
     thumb.insertBefore(video, thumb.querySelector(".badge"));
   }
 
@@ -873,7 +872,7 @@ function attachAudioPreview(thumb, asset, card) {
     if (!audio.paused) { stopPreview(); return; }
     stopPreview();
     try {
-      if (!audio.src) audio.src = asset.url;
+      if (!audio.src) audio.src = streamUrl(asset);
       await audio.play();
       card.classList.add("playing"); btn.innerHTML = ICONS.pause;
       currentPreview = { audio, card, btn };
@@ -908,7 +907,7 @@ async function doInsert(asset, card) {
   showStatus("⏳ מכניס לשקף...", "inf", false);
 
   try {
-    const r = await fetch(ucDownloadUrl(asset.id), { mode: "cors" });
+    const r = await fetch(asset.url, { mode: "cors" });
     if (!r.ok) throw new Error(`לא ניתן להוריד את הקובץ (HTTP ${r.status})`);
     const blob = await r.blob();
 
@@ -994,8 +993,10 @@ async function insertAudio(asset, card) {
       const slide = await getActiveSlide(ctx);
       if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
 
-      const r = await fetch(ucDownloadUrl(asset.id), { mode: "cors" });
+      const r = await fetch(streamUrl(asset), { mode: "cors" });
       if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
+      if ((r.headers.get("content-type") || "").includes("text/html"))
+        throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
       const b64 = await blobToBase64(await r.blob());
 
       slide.shapes.addAudioFromBase64(b64, { isLooping: false, isPlaying: false });
@@ -1022,8 +1023,10 @@ async function insertAudio(asset, card) {
 async function insertVideo(asset, card) {
   showStatus("⏳ מוריד וידאו...", "inf", false);
   try {
-    const r = await fetch(ucDownloadUrl(asset.id), { mode: "cors" });
+    const r = await fetch(streamUrl(asset), { mode: "cors" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if ((r.headers.get("content-type") || "").includes("text/html"))
+      throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
     const u = URL.createObjectURL(await r.blob());
     const a = document.createElement("a");
     a.href = u; a.download = asset.rawName || (asset.name + ".mp4");
