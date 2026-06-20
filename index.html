@@ -907,8 +907,14 @@ async function doInsert(asset, card) {
   showStatus("⏳ מכניס לשקף...", "inf", false);
 
   try {
-    const r = await fetch(asset.url, { mode: "cors" });
+    // alt=media (asset.url) serves NO CORS header → fetch(mode:cors) rejects with
+    // "Load failed" in the Office WebView (curl sees 403; WebKit fails it before status).
+    // usercontent (streamUrl) returns 200 + Access-Control-Allow-Origin:* + the original
+    // bytes, no re-encode — verified against live Drive files. Keep image insert on streamUrl.
+    const r = await fetch(streamUrl(asset), { mode: "cors" });
     if (!r.ok) throw new Error(`לא ניתן להוריד את הקובץ (HTTP ${r.status})`);
+    if ((r.headers.get("content-type") || "").includes("text/html"))
+      throw new Error("הקובץ אינו משותף לציבור או דורש אישור הורדה");
     const blob = await r.blob();
 
     const isSvg = /\.svg$/i.test(asset.rawName || asset.name) || blob.type === "image/svg+xml";
