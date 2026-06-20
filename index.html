@@ -922,8 +922,20 @@ function downloadAsset(asset, card) {
 // WebView blocks fetch/CORS, Path 2 = <img crossorigin> → canvas → PNG base64: loads the
 // image as a tag (no Origin header, exactly how the thumbnails load) and never calls fetch.
 // Path 2 rasterizes SVG, but a rasterized insert beats a failed one.
+// Full-resolution lh3 URL: the thumbnail host (which loads in this WebView) serves the
+// ORIGINAL bytes at =s0 with Access-Control-Allow-Origin:* — so a crossOrigin canvas read
+// works where usercontent's does not (usercontent is cookie/consent-sensitive → redirects).
+function lh3Full(asset) {
+  const t = asset.thumbnail || "";
+  if (t.includes("googleusercontent.com")) return t.replace(/=s\d+(-[a-z]+)?$/i, "=s0");
+  if (t.includes("drive.google.com/thumbnail")) return t.replace(/([?&])sz=[^&]*/i, "$1sz=s0");
+  return null;
+}
+
 async function getImageData(asset) {
   const isSvg = /\.svg$/i.test(asset.rawName || asset.name);
+  // Path 1: fetch the exact file (best — original bytes + native SVG vector). Blocked in the
+  // Office WebView (CORS), kept for hosts/versions where fetch works.
   try {
     const r = await fetch(streamUrl(asset), { mode: "cors" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -934,10 +946,13 @@ async function getImageData(asset) {
     const dims = svg ? await getSvgDims(blob) : await getImgDims(URL.createObjectURL(blob));
     return { b64: await blobToBase64(blob), dims };
   } catch (eFetch) {
+    // Path 2: lh3 =s0 (original bytes, CORS:*, same host as the working thumbnails) → canvas.
+    const url = lh3Full(asset);
+    if (!url) throw new Error(`[load] fetch:${eFetch.name||""}:${eFetch.message||eFetch} | no-lh3`);
     try {
-      return await imgToBase64ViaCanvas(streamUrl(asset));   // fetch blocked → tag+canvas
+      return await imgToBase64ViaCanvas(url);
     } catch (eCanvas) {
-      throw new Error(`[load] fetch:${eFetch.name||""}:${eFetch.message||eFetch} | canvas:${eCanvas.message||eCanvas}`);
+      throw new Error(`[load] fetch:${eFetch.name||""}:${eFetch.message||eFetch} | lh3canvas:${eCanvas.message||eCanvas}`);
     }
   }
 }
