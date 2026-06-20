@@ -486,6 +486,14 @@ function fileDownloadUrl(id) {
   return `${DRIVE_API}/${id}?alt=media&key=${GOOGLE_API_KEY}`;
 }
 
+// Direct usercontent URL for audio/video fetch-based inserts.
+// alt=media redirects to usercontent for large files — that redirect chain breaks
+// fetch CORS in WKWebView. This URL hits usercontent directly, no redirect.
+// Only for publicly shared files (no API key needed). Images stay on alt=media.
+function ucDownloadUrl(id) {
+  return `https://drive.usercontent.google.com/download?id=${id}&export=download`;
+}
+
 // ─── Folder → category mapping ────────────────────────────────────────────────
 const FOLDER_META = {
   "מוקאפים":    { icon: "🖥️", label: "מוקאפים" },
@@ -900,7 +908,7 @@ async function doInsert(asset, card) {
   showStatus("⏳ מכניס לשקף...", "inf", false);
 
   try {
-    const r = await fetch(asset.url, { mode: "cors" });
+    const r = await fetch(ucDownloadUrl(asset.id), { mode: "cors" });
     if (!r.ok) throw new Error(`לא ניתן להוריד את הקובץ (HTTP ${r.status})`);
     const blob = await r.blob();
 
@@ -986,7 +994,7 @@ async function insertAudio(asset, card) {
       const slide = await getActiveSlide(ctx);
       if (typeof slide.shapes.addAudioFromBase64 !== "function") return;
 
-      const r = await fetch(asset.url, { mode: "cors" });
+      const r = await fetch(ucDownloadUrl(asset.id), { mode: "cors" });
       if (!r.ok) throw new Error(`לא ניתן להוריד (HTTP ${r.status})`);
       const b64 = await blobToBase64(await r.blob());
 
@@ -1014,7 +1022,7 @@ async function insertAudio(asset, card) {
 async function insertVideo(asset, card) {
   showStatus("⏳ מוריד וידאו...", "inf", false);
   try {
-    const r = await fetch(asset.url, { mode: "cors" });
+    const r = await fetch(ucDownloadUrl(asset.id), { mode: "cors" });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const u = URL.createObjectURL(await r.blob());
     const a = document.createElement("a");
