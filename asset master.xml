@@ -34,7 +34,7 @@
   </Requirements>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://yaromstuff.github.io/asset-master-addin/index.html?v=20260619f"/>
+    <SourceLocation DefaultValue="https://yaromstuff.github.io/asset-master-addin/index.html?v=20260619g"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -86,7 +86,7 @@
         <bt:Image id="icon.80" DefaultValue="https://yaromstuff.github.io/asset-master-addin/icons/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="addin.url" DefaultValue="https://yaromstuff.github.io/asset-master-addin/index.html?v=20260619f"/>
+        <bt:Url id="addin.url" DefaultValue="https://yaromstuff.github.io/asset-master-addin/index.html?v=20260619g"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="addin.title"  DefaultValue="ספריית נכסים"/>
