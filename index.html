@@ -934,7 +934,11 @@ async function getImageData(asset) {
     const dims = svg ? await getSvgDims(blob) : await getImgDims(URL.createObjectURL(blob));
     return { b64: await blobToBase64(blob), dims };
   } catch (eFetch) {
-    return await imgToBase64ViaCanvas(streamUrl(asset));   // fetch blocked → tag+canvas
+    try {
+      return await imgToBase64ViaCanvas(streamUrl(asset));   // fetch blocked → tag+canvas
+    } catch (eCanvas) {
+      throw new Error(`[load] fetch:${eFetch.name||""}:${eFetch.message||eFetch} | canvas:${eCanvas.message||eCanvas}`);
+    }
   }
 }
 
@@ -961,8 +965,9 @@ async function doInsert(asset, card) {
   showStatus("⏳ מכניס לשקף...", "inf", false);
 
   try {
-    const { b64, dims } = await getImageData(asset);
-    await insertImageOnSlide(b64, dims);
+    const { b64, dims } = await getImageData(asset);   // throws "[load] ..." on failure
+    try { await insertImageOnSlide(b64, dims); }
+    catch (e) { throw new Error(`[insert] ${e.message || e}`); }
 
     card.classList.add("ins");
     setTimeout(() => card.classList.remove("ins"), 550);
